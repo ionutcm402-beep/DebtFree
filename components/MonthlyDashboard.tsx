@@ -74,7 +74,8 @@ export function MonthlyDashboard({ demo = false }: { demo?: boolean }) {
 
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         window.location.replace("/login");
         return;
@@ -126,7 +127,8 @@ export function MonthlyDashboard({ demo = false }: { demo?: boolean }) {
     }
     if (!supabase) return;
     setStatus("Saving…");
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return;
     const { error } = await supabase.from("user_settings").upsert({ user_id: user.id, currency: next }, { onConflict: "user_id" });
     setStatus(error ? "Couldn’t save currency" : "All figures up to date");
