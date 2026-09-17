@@ -28,7 +28,10 @@ create table if not exists public.user_settings (
   hourly_rate numeric(10, 2) not null default 0 check (hourly_rate >= 0),
   tax_code text not null default '1257L' check (char_length(tax_code) between 1 and 8),
   ni_category text not null default 'A' check (ni_category in ('A','B','C','D','E','F','H','I','J','K','L','M','N','S','V','Z')),
-  pension_percent numeric(5, 2) not null default 0 check (pension_percent between 0 and 100)
+  pension_percent numeric(5, 2) not null default 0 check (pension_percent between 0 and 100),
+  holiday_allowance_days numeric(6, 2) not null default 28 check (holiday_allowance_days >= 0),
+  holiday_day_hours numeric(5, 2) not null default 8 check (holiday_day_hours between 0 and 24),
+  payroll_cutoff_days smallint not null default 7 check (payroll_cutoff_days between 0 and 21)
 );
 
 alter table public.debts add column if not exists extra_payment numeric(14, 2) not null default 0 check (extra_payment >= 0);
@@ -47,6 +50,9 @@ alter table public.user_settings add column if not exists hourly_rate numeric(10
 alter table public.user_settings add column if not exists tax_code text not null default '1257L' check (char_length(tax_code) between 1 and 8);
 alter table public.user_settings add column if not exists ni_category text not null default 'A' check (ni_category in ('A','B','C','D','E','F','H','I','J','K','L','M','N','S','V','Z'));
 alter table public.user_settings add column if not exists pension_percent numeric(5, 2) not null default 0 check (pension_percent between 0 and 100);
+alter table public.user_settings add column if not exists holiday_allowance_days numeric(6, 2) not null default 28 check (holiday_allowance_days >= 0);
+alter table public.user_settings add column if not exists holiday_day_hours numeric(5, 2) not null default 8 check (holiday_day_hours between 0 and 24);
+alter table public.user_settings add column if not exists payroll_cutoff_days smallint not null default 7 check (payroll_cutoff_days between 0 and 21);
 alter table public.user_settings add column if not exists forecast_starting_balance numeric(14, 2) not null default 0;
 alter table public.user_settings add column if not exists forecast_horizon smallint not null default 30 check (forecast_horizon in (30, 60, 90));
 alter table public.user_settings add column if not exists debt_payment_day smallint not null default 28 check (debt_payment_day between 1 and 31);
@@ -68,6 +74,11 @@ create table if not exists public.work_shifts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   work_date date not null,
+  entry_type text not null default 'work' check (entry_type in ('work', 'holiday')),
+  start_time time,
+  finish_time time,
+  break_minutes smallint not null default 0 check (break_minutes between 0 and 720),
+  holiday_days numeric(4, 2) not null default 0 check (holiday_days between 0 and 1),
   hours numeric(6, 2) not null default 0 check (hours between 0 and 24),
   direct_tips numeric(14, 2) not null default 0 check (direct_tips >= 0),
   payroll_gratuity numeric(14, 2) not null default 0 check (payroll_gratuity >= 0),
@@ -78,6 +89,11 @@ create table if not exists public.work_shifts (
 );
 
 create index if not exists work_shifts_user_id_work_date_idx on public.work_shifts (user_id, work_date desc);
+alter table public.work_shifts add column if not exists entry_type text not null default 'work' check (entry_type in ('work', 'holiday'));
+alter table public.work_shifts add column if not exists start_time time;
+alter table public.work_shifts add column if not exists finish_time time;
+alter table public.work_shifts add column if not exists break_minutes smallint not null default 0 check (break_minutes between 0 and 720);
+alter table public.work_shifts add column if not exists holiday_days numeric(4, 2) not null default 0 check (holiday_days between 0 and 1);
 
 create table if not exists public.money_accounts (
   id uuid primary key default gen_random_uuid(),
