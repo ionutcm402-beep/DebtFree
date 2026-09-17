@@ -18,8 +18,7 @@ type MoneyAccount = { id: string; name: string; asset_type: string; value: numbe
 const accountTypes = ["Cash", "Current account", "Savings account", "Debit / prepaid card", "Fixed deposit", "ISA", "Brokerage account", "Crypto", "Stocks", "ETF", "Mutual fund", "Bonds", "Pension", "Property", "Land", "Business ownership", "Precious metals", "Collectibles", "Investment fund", "Other asset"];
 
 export function MoneyLedger({ demo = false }: { demo?: boolean }) {
-  const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const supabase = useMemo(() => demo || !configured ? null : createClient(), [configured, demo]);
+  const supabase = useMemo(() => demo ? null : createClient(), [demo]);
   const [userId, setUserId] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("GBP");
   const [accounts, setAccounts] = useState<MoneyAccount[]>(demo ? previewAccounts : []);
