@@ -56,6 +56,19 @@ async function imageDataUrl(file: File) {
   }
 }
 
+async function scanPrivately(image: string, onProgress: (message: string) => void) {
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("eng", undefined, { logger: (message) => {
+    if (message.status === "recognizing text") onProgress(`Reading receipt… ${Math.round(message.progress * 100)}%`);
+  } });
+  try {
+    const result = await worker.recognize(image);
+    return parseReceiptText(result.data.text, result.data.confidence);
+  } finally {
+    await worker.terminate();
+  }
+}
+
 export function SpendingTracker({ demo = false }: { demo?: boolean }) {
   const supabase = useMemo(() => demo ? null : createClient(), [demo]);
   const [userId, setUserId] = useState("");
@@ -279,21 +292,19 @@ export function SpendingTracker({ demo = false }: { demo?: boolean }) {
     try {
       const image = await imageDataUrl(file);
       if (scanMode === "private") {
-        const { createWorker } = await import("tesseract.js");
-        const worker = await createWorker("eng", undefined, { logger: (message) => {
-          if (message.status === "recognizing text") setScanStatus(`Reading receipt… ${Math.round(message.progress * 100)}%`);
-        } });
-        try {
-          const result = await worker.recognize(image);
-          applyResult(parseReceiptText(result.data.text, result.data.confidence), "receipt_private");
-        } finally {
-          await worker.terminate();
-        }
+        applyResult(await scanPrivately(image, setScanStatus), "receipt_private");
       } else {
-        const response = await fetch("/api/receipt-scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image }) });
-        const result = await response.json() as { receipt?: ReceiptResult; error?: string };
-        if (!response.ok || !result.receipt) throw new Error(result.error || "The AI scan failed.");
-        applyResult(result.receipt, "receipt_ai");
+        try {
+          const response = await fetch("/api/receipt-scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image }) });
+          const result = await response.json() as { receipt?: ReceiptResult; error?: string };
+          if (!response.ok || !result.receipt) throw new Error(result.error || "The AI scan failed.");
+          applyResult(result.receipt, "receipt_ai");
+        } catch {
+          setScanStatus("AI scan unavailable. Reading this receipt privately on your phone…");
+          const privateResult = await scanPrivately(image, setScanStatus);
+          applyResult(privateResult, "receipt_private");
+          setScanStatus("Receipt read privately. Check the details, then add the expense.");
+        }
       }
     } catch (error) {
       setScanStatus(error instanceof Error ? error.message : "The receipt could not be read. Enter it manually below.");
@@ -369,7 +380,7 @@ export function SpendingTracker({ demo = false }: { demo?: boolean }) {
           <h2 className="font-serif text-3xl">Expenses</h2>
           <p className="mt-2 text-sm text-muted-ink">Edit any result if the receipt was unclear.</p>
           <div className="mt-5 overflow-x-auto border-y border-rule bg-sheet">
-            <Table className="min-w-[850px]"><TableHeader><TableRow className="hover:bg-transparent [&_th]:text-center"><TableHead>Date</TableHead><TableHead>Merchant</TableHead><TableHead>Category</TableHead><TableHead>Amount</TableHead><TableHead>Added by</TableHead><TableHead className="w-16"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>
+            <Table className={expenses.length ? "min-w-[850px]" : "min-w-full"}><TableHeader className={expenses.length ? "" : "hidden"}><TableRow className="hover:bg-transparent [&_th]:text-center"><TableHead>Date</TableHead><TableHead>Merchant</TableHead><TableHead>Category</TableHead><TableHead>Amount</TableHead><TableHead>Added by</TableHead><TableHead className="w-16"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>
               {expenses.length ? expenses.map((expense) => <TableRow key={expense.id}><TableCell><Input type="date" value={expense.expense_date} onChange={(event) => updateExpense(expense.id, "expense_date", event.target.value)} className="rounded-none bg-white text-center" /></TableCell><TableCell><Input value={expense.merchant} onChange={(event) => updateExpense(expense.id, "merchant", event.target.value)} className="rounded-none bg-white text-center" /></TableCell><TableCell><Select value={expense.category} onValueChange={(value) => updateExpense(expense.id, "category", value)}><SelectTrigger className="w-full min-w-40 rounded-none bg-white"><SelectValue /></SelectTrigger><SelectContent>{expenseCategories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><div className="flex items-center"><span className="mr-2 text-muted-ink">{currencyDetails(currency).symbol}</span><Input type="number" min="0" step="0.01" value={expense.amount} onChange={(event) => updateExpense(expense.id, "amount", event.target.value)} className="rounded-none bg-white text-center tabular-nums" /></div></TableCell><TableCell className="text-sm text-muted-ink">{expense.source === "receipt_ai" ? "AI scan" : expense.source === "receipt_private" ? "Private scan" : "Manual"}</TableCell><TableCell><Button variant="ghost" size="icon-sm" onClick={() => void removeExpense(expense.id)} title={`Delete ${expense.merchant}`}><Trash2 /></Button></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-ink">No expenses yet.</TableCell></TableRow>}
             </TableBody></Table>
           </div>
@@ -395,7 +406,7 @@ export function SpendingTracker({ demo = false }: { demo?: boolean }) {
 
           <div className="mt-6 overflow-x-auto border-y border-rule bg-sheet">
             <div className="grid border-b border-rule md:grid-cols-3 md:divide-x md:divide-rule"><div className="p-5"><p className="text-sm text-muted-ink">Ready to assign</p><p className="mt-1 font-serif text-3xl">{formatMoney(monthUnassignedTotal, currency)}</p></div><div className="border-t border-rule p-5 md:border-t-0"><p className="text-sm text-muted-ink">Planned destination</p><p className="mt-1 font-serif text-3xl text-snowball">{formatMoney(monthPlannedTotal, currency)}</p></div><div className="border-t border-rule p-5 md:border-t-0"><p className="text-sm text-muted-ink">Marked as moved</p><p className="mt-1 font-serif text-3xl text-positive">{formatMoney(monthMovedTotal, currency)}</p></div></div>
-            <Table className="min-w-[1250px]"><TableHeader><TableRow className="hover:bg-transparent [&_th]:text-center"><TableHead>Date</TableHead><TableHead>Smart choice</TableHead><TableHead>Related category</TableHead><TableHead>How you saved</TableHead><TableHead>Amount saved</TableHead><TableHead>Use this money</TableHead><TableHead>Action</TableHead><TableHead className="w-16"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>
+            <Table className={savingEntries.length ? "min-w-[1250px]" : "min-w-full"}><TableHeader className={savingEntries.length ? "" : "hidden"}><TableRow className="hover:bg-transparent [&_th]:text-center"><TableHead>Date</TableHead><TableHead>Smart choice</TableHead><TableHead>Related category</TableHead><TableHead>How you saved</TableHead><TableHead>Amount saved</TableHead><TableHead>Use this money</TableHead><TableHead>Action</TableHead><TableHead className="w-16"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>
               {savingEntries.length ? savingEntries.map((entry) => {
                 const currentDestination = entry.allocation_type === "debt" ? `debt:${entry.allocation_target}` : entry.allocation_type;
                 const debtStillExists = entry.allocation_type !== "debt" || debts.some((debt) => debt.id === entry.allocation_target);
@@ -424,7 +435,7 @@ export function SpendingTracker({ demo = false }: { demo?: boolean }) {
           </div>
 
           <div className="mt-6 overflow-x-auto border-y border-rule bg-sheet">
-            <Table className="min-w-[850px]"><TableHeader><TableRow className="hover:bg-transparent [&_th]:text-center"><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Original category</TableHead><TableHead>Reason</TableHead><TableHead>Value lost</TableHead><TableHead className="w-16"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>
+            <Table className={wasteEntries.length ? "min-w-[850px]" : "min-w-full"}><TableHeader className={wasteEntries.length ? "" : "hidden"}><TableRow className="hover:bg-transparent [&_th]:text-center"><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Original category</TableHead><TableHead>Reason</TableHead><TableHead>Value lost</TableHead><TableHead className="w-16"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>
               {wasteEntries.length ? wasteEntries.map((entry) => <TableRow key={entry.id}><TableCell><Input type="date" value={entry.waste_date} onChange={(event) => updateWasteEntry(entry.id, "waste_date", event.target.value)} className="rounded-none bg-white text-center" /></TableCell><TableCell><Input value={entry.name} onChange={(event) => updateWasteEntry(entry.id, "name", event.target.value)} className="rounded-none bg-white text-center" /></TableCell><TableCell><Select value={entry.category} onValueChange={(value) => updateWasteEntry(entry.id, "category", value)}><SelectTrigger className="w-full min-w-40 rounded-none bg-white"><SelectValue /></SelectTrigger><SelectContent>{expenseCategories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><Select value={entry.reason} onValueChange={(value) => updateWasteEntry(entry.id, "reason", value)}><SelectTrigger className="w-full min-w-44 rounded-none bg-white"><SelectValue /></SelectTrigger><SelectContent>{wasteReasons.map((reason) => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><div className="flex items-center"><span className="mr-2 text-muted-ink">{currencyDetails(currency).symbol}</span><Input type="number" min="0" step="0.01" value={entry.amount} onChange={(event) => updateWasteEntry(entry.id, "amount", event.target.value)} className="rounded-none bg-white text-center tabular-nums" /></div></TableCell><TableCell><Button variant="ghost" size="icon-sm" onClick={() => void removeWasteEntry(entry.id)} title={`Delete ${entry.name}`}><Trash2 /></Button></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-ink">Nothing recorded as wasted.</TableCell></TableRow>}
             </TableBody></Table>
           </div>
