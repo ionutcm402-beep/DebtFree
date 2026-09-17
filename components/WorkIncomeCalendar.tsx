@@ -87,7 +87,7 @@ export function WorkIncomeCalendar({ demo, onForecastChange, onStatusChange }: P
       setSettings({
         hourly_rate: Number(saved?.hourly_rate ?? 0),
         tax_code: String(saved?.tax_code ?? "1257L"),
-        ni_category: niCategories.includes(saved?.ni_category as NiCategory) ? saved.ni_category as NiCategory : "A",
+        ni_category: niCategories.includes(saved?.ni_category as NiCategory) ? saved?.ni_category as NiCategory : "A",
         pension_percent: Number(saved?.pension_percent ?? 0),
       });
       setLoaded(true);
