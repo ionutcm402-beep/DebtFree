@@ -24,7 +24,11 @@ create table if not exists public.user_settings (
   utilities_cost numeric(14, 2) not null default 0 check (utilities_cost >= 0),
   food_cost numeric(14, 2) not null default 0 check (food_cost >= 0),
   transport_cost numeric(14, 2) not null default 0 check (transport_cost >= 0),
-  other_essential_cost numeric(14, 2) not null default 0 check (other_essential_cost >= 0)
+  other_essential_cost numeric(14, 2) not null default 0 check (other_essential_cost >= 0),
+  hourly_rate numeric(10, 2) not null default 0 check (hourly_rate >= 0),
+  tax_code text not null default '1257L' check (char_length(tax_code) between 1 and 8),
+  ni_category text not null default 'A' check (ni_category in ('A','B','C','D','E','F','H','I','J','K','L','M','N','S','V','Z')),
+  pension_percent numeric(5, 2) not null default 0 check (pension_percent between 0 and 100)
 );
 
 alter table public.debts add column if not exists extra_payment numeric(14, 2) not null default 0 check (extra_payment >= 0);
@@ -39,6 +43,10 @@ alter table public.user_settings add column if not exists utilities_cost numeric
 alter table public.user_settings add column if not exists food_cost numeric(14, 2) not null default 0 check (food_cost >= 0);
 alter table public.user_settings add column if not exists transport_cost numeric(14, 2) not null default 0 check (transport_cost >= 0);
 alter table public.user_settings add column if not exists other_essential_cost numeric(14, 2) not null default 0 check (other_essential_cost >= 0);
+alter table public.user_settings add column if not exists hourly_rate numeric(10, 2) not null default 0 check (hourly_rate >= 0);
+alter table public.user_settings add column if not exists tax_code text not null default '1257L' check (char_length(tax_code) between 1 and 8);
+alter table public.user_settings add column if not exists ni_category text not null default 'A' check (ni_category in ('A','B','C','D','E','F','H','I','J','K','L','M','N','S','V','Z'));
+alter table public.user_settings add column if not exists pension_percent numeric(5, 2) not null default 0 check (pension_percent between 0 and 100);
 alter table public.user_settings add column if not exists forecast_starting_balance numeric(14, 2) not null default 0;
 alter table public.user_settings add column if not exists forecast_horizon smallint not null default 30 check (forecast_horizon in (30, 60, 90));
 alter table public.user_settings add column if not exists debt_payment_day smallint not null default 28 check (debt_payment_day between 1 and 31);
@@ -55,6 +63,21 @@ create table if not exists public.cashflow_entries (
 
 create index if not exists cashflow_entries_user_id_created_at_idx on public.cashflow_entries (user_id, created_at);
 alter table public.cashflow_entries add column if not exists pay_day smallint not null default 1 check (pay_day between 1 and 31);
+
+create table if not exists public.work_shifts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  work_date date not null,
+  hours numeric(6, 2) not null default 0 check (hours between 0 and 24),
+  direct_tips numeric(14, 2) not null default 0 check (direct_tips >= 0),
+  payroll_gratuity numeric(14, 2) not null default 0 check (payroll_gratuity >= 0),
+  other_income numeric(14, 2) not null default 0 check (other_income >= 0),
+  note text not null default '' check (char_length(note) <= 240),
+  created_at timestamptz not null default now(),
+  unique (user_id, work_date)
+);
+
+create index if not exists work_shifts_user_id_work_date_idx on public.work_shifts (user_id, work_date desc);
 
 create table if not exists public.money_accounts (
   id uuid primary key default gen_random_uuid(),
@@ -193,6 +216,7 @@ create index if not exists debt_snapshots_user_id_snapshot_date_idx on public.de
 alter table public.debts enable row level security;
 alter table public.user_settings enable row level security;
 alter table public.cashflow_entries enable row level security;
+alter table public.work_shifts enable row level security;
 alter table public.money_accounts enable row level security;
 alter table public.expenses enable row level security;
 alter table public.waste_entries enable row level security;
@@ -207,6 +231,7 @@ alter table public.debt_snapshots enable row level security;
 revoke all on table public.debts from anon;
 revoke all on table public.user_settings from anon;
 revoke all on table public.cashflow_entries from anon;
+revoke all on table public.work_shifts from anon;
 revoke all on table public.money_accounts from anon;
 revoke all on table public.expenses from anon;
 revoke all on table public.waste_entries from anon;
@@ -220,6 +245,7 @@ revoke all on table public.debt_snapshots from anon;
 grant select, insert, update, delete on table public.debts to authenticated;
 grant select, insert, update, delete on table public.user_settings to authenticated;
 grant select, insert, update, delete on table public.cashflow_entries to authenticated;
+grant select, insert, update, delete on table public.work_shifts to authenticated;
 grant select, insert, update, delete on table public.money_accounts to authenticated;
 grant select, insert, update, delete on table public.expenses to authenticated;
 grant select, insert, update, delete on table public.waste_entries to authenticated;
@@ -243,6 +269,10 @@ drop policy if exists "Users can read their own cashflow" on public.cashflow_ent
 drop policy if exists "Users can add their own cashflow" on public.cashflow_entries;
 drop policy if exists "Users can update their own cashflow" on public.cashflow_entries;
 drop policy if exists "Users can delete their own cashflow" on public.cashflow_entries;
+drop policy if exists "Users can read their own work shifts" on public.work_shifts;
+drop policy if exists "Users can add their own work shifts" on public.work_shifts;
+drop policy if exists "Users can update their own work shifts" on public.work_shifts;
+drop policy if exists "Users can delete their own work shifts" on public.work_shifts;
 drop policy if exists "Users can read their own money accounts" on public.money_accounts;
 drop policy if exists "Users can add their own money accounts" on public.money_accounts;
 drop policy if exists "Users can update their own money accounts" on public.money_accounts;
@@ -338,6 +368,20 @@ using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 create policy "Users can delete their own cashflow"
 on public.cashflow_entries for delete to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users can read their own work shifts"
+on public.work_shifts for select to authenticated
+using ((select auth.uid()) = user_id);
+create policy "Users can add their own work shifts"
+on public.work_shifts for insert to authenticated
+with check ((select auth.uid()) = user_id);
+create policy "Users can update their own work shifts"
+on public.work_shifts for update to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+create policy "Users can delete their own work shifts"
+on public.work_shifts for delete to authenticated
 using ((select auth.uid()) = user_id);
 
 create policy "Users can read their own money accounts"
