@@ -31,7 +31,9 @@ create table if not exists public.user_settings (
   pension_percent numeric(5, 2) not null default 0 check (pension_percent between 0 and 100),
   holiday_allowance_days numeric(6, 2) not null default 28 check (holiday_allowance_days >= 0),
   holiday_day_hours numeric(5, 2) not null default 8 check (holiday_day_hours between 0 and 24),
-  payroll_cutoff_days smallint not null default 7 check (payroll_cutoff_days between 0 and 21)
+  payroll_cutoff_days smallint not null default 7 check (payroll_cutoff_days between 0 and 21),
+  payroll_payday_weekday smallint not null default 5 check (payroll_payday_weekday between 0 and 6),
+  payroll_week_start smallint not null default 5 check (payroll_week_start between 0 and 6)
 );
 
 alter table public.debts add column if not exists extra_payment numeric(14, 2) not null default 0 check (extra_payment >= 0);
@@ -53,6 +55,8 @@ alter table public.user_settings add column if not exists pension_percent numeri
 alter table public.user_settings add column if not exists holiday_allowance_days numeric(6, 2) not null default 28 check (holiday_allowance_days >= 0);
 alter table public.user_settings add column if not exists holiday_day_hours numeric(5, 2) not null default 8 check (holiday_day_hours between 0 and 24);
 alter table public.user_settings add column if not exists payroll_cutoff_days smallint not null default 7 check (payroll_cutoff_days between 0 and 21);
+alter table public.user_settings add column if not exists payroll_payday_weekday smallint not null default 5 check (payroll_payday_weekday between 0 and 6);
+alter table public.user_settings add column if not exists payroll_week_start smallint not null default 5 check (payroll_week_start between 0 and 6);
 alter table public.user_settings add column if not exists forecast_starting_balance numeric(14, 2) not null default 0;
 alter table public.user_settings add column if not exists forecast_horizon smallint not null default 30 check (forecast_horizon in (30, 60, 90));
 alter table public.user_settings add column if not exists debt_payment_day smallint not null default 28 check (debt_payment_day between 1 and 31);
