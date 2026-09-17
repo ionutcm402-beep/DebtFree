@@ -5,11 +5,19 @@ export type WorkIncomeSettings = {
   tax_code: string;
   ni_category: NiCategory;
   pension_percent: number;
+  holiday_allowance_days: number;
+  holiday_day_hours: number;
+  payroll_cutoff_days: number;
 };
 
 export type WorkShift = {
   id: string;
   work_date: string;
+  entry_type: "work" | "holiday";
+  start_time: string;
+  finish_time: string;
+  break_minutes: number;
+  holiday_days: number;
   hours: number;
   direct_tips: number;
   payroll_gratuity: number;
@@ -19,8 +27,12 @@ export type WorkShift = {
 
 export type UkPayEstimate = {
   hours: number;
+  holidayHours: number;
+  holidayPay: number;
   wages: number;
   directTips: number;
+  payrollTips: number;
+  otherIncome: number;
   payrollExtras: number;
   gross: number;
   pension: number;
@@ -30,7 +42,76 @@ export type UkPayEstimate = {
   annualEquivalent: number;
 };
 
+export type PayPeriod = {
+  start: string;
+  cutoff: string;
+  payday: string;
+  weeks: number;
+  label: string;
+};
+
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+function dateFromKey(value: string) {
+  return new Date(`${value}T12:00:00`);
+}
+
+function keyFromDate(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(value: Date, days: number) {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function lastFriday(year: number, monthIndex: number) {
+  const date = new Date(year, monthIndex + 1, 0, 12);
+  while (date.getDay() !== 5) date.setDate(date.getDate() - 1);
+  return date;
+}
+
+export function calculateWorkedHours(startTime: string, finishTime: string, breakMinutes: number) {
+  if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(finishTime)) return 0;
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [finishHour, finishMinute] = finishTime.split(":").map(Number);
+  let minutes = finishHour * 60 + finishMinute - (startHour * 60 + startMinute);
+  if (minutes <= 0) minutes += 24 * 60;
+  return money(Math.max(0, minutes - Math.max(0, breakMinutes)) / 60);
+}
+
+export function financialYearBounds(dateValue: string) {
+  const date = dateFromKey(dateValue);
+  const aprilSix = new Date(date.getFullYear(), 3, 6, 12);
+  const startYear = date >= aprilSix ? date.getFullYear() : date.getFullYear() - 1;
+  return { startYear, start: `${startYear}-04-06`, end: `${startYear + 1}-04-05`, label: `${startYear}/${String(startYear + 1).slice(-2)}` };
+}
+
+export function payPeriodForMonth(year: number, monthIndex: number, cutoffDays = 7): PayPeriod {
+  const payday = lastFriday(year, monthIndex);
+  const previousMonth = new Date(year, monthIndex - 1, 1, 12);
+  const previousPayday = lastFriday(previousMonth.getFullYear(), previousMonth.getMonth());
+  const cutoff = addDays(payday, -cutoffDays);
+  const previousCutoff = addDays(previousPayday, -cutoffDays);
+  const start = addDays(previousCutoff, 1);
+  const days = Math.round((cutoff.getTime() - start.getTime()) / 86_400_000) + 1;
+  return {
+    start: keyFromDate(start),
+    cutoff: keyFromDate(cutoff),
+    payday: keyFromDate(payday),
+    weeks: Math.round(days / 7),
+    label: new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(payday),
+  };
+}
+
+export function financialYearPayPeriods(startYear: number, cutoffDays = 7) {
+  return Array.from({ length: 12 }, (_, index) => payPeriodForMonth(startYear + Math.floor((index + 3) / 12), (index + 3) % 12, cutoffDays));
+}
+
+export function shiftsInPeriod(shifts: WorkShift[], period: PayPeriod) {
+  return shifts.filter((shift) => shift.work_date >= period.start && shift.work_date <= period.cutoff);
+}
 
 function taxCodeAllowance(taxCode: string): number {
   const code = taxCode.toUpperCase().replace(/\s/g, "");
@@ -75,8 +156,12 @@ function estimateNationalInsurance(monthlyNiPay: number, category: NiCategory): 
 export function estimateUkMonthlyPay(shifts: WorkShift[], settings: WorkIncomeSettings): UkPayEstimate {
   const hours = shifts.reduce((sum, shift) => sum + Math.max(0, Number(shift.hours)), 0);
   const wages = hours * Math.max(0, Number(settings.hourly_rate));
+  const holidayHours = shifts.filter((shift) => shift.entry_type === "holiday").reduce((sum, shift) => sum + Math.max(0, Number(shift.hours)), 0);
+  const holidayPay = holidayHours * Math.max(0, Number(settings.hourly_rate));
   const directTips = shifts.reduce((sum, shift) => sum + Math.max(0, Number(shift.direct_tips)), 0);
-  const payrollExtras = shifts.reduce((sum, shift) => sum + Math.max(0, Number(shift.payroll_gratuity)) + Math.max(0, Number(shift.other_income)), 0);
+  const payrollTips = shifts.reduce((sum, shift) => sum + Math.max(0, Number(shift.payroll_gratuity)), 0);
+  const otherIncome = shifts.reduce((sum, shift) => sum + Math.max(0, Number(shift.other_income)), 0);
+  const payrollExtras = payrollTips + otherIncome;
   const gross = wages + directTips + payrollExtras;
   const niPayBeforePension = wages + payrollExtras;
   const pension = niPayBeforePension * Math.min(100, Math.max(0, Number(settings.pension_percent))) / 100;
@@ -87,8 +172,12 @@ export function estimateUkMonthlyPay(shifts: WorkShift[], settings: WorkIncomeSe
 
   return {
     hours: money(hours),
+    holidayHours: money(holidayHours),
+    holidayPay: money(holidayPay),
     wages: money(wages),
     directTips: money(directTips),
+    payrollTips: money(payrollTips),
+    otherIncome: money(otherIncome),
     payrollExtras: money(payrollExtras),
     gross: money(gross),
     pension: money(pension),
