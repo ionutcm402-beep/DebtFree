@@ -54,7 +54,8 @@ export function DebtProgress({ demo = false }: { demo?: boolean }) {
     if (!supabase) { window.location.replace("/preview/progress"); return; }
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { window.location.replace("/login"); return; }
       const [debtResult, snapshotResult, settingsResult] = await Promise.all([
         supabase.from("debts").select("id,name,balance,apr,min_payment,extra_payment,start_date,account_type").order("created_at"),
