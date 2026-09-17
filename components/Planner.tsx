@@ -378,3 +378,10 @@ export function Planner({ demo = false }: { demo?: boolean }) {
           <DialogFooter><Button variant="outline" className="rounded-none" onClick={() => setAprDebtId(null)}>Cancel</Button><Button className="rounded-none" onClick={applyApr} disabled={estimatedApr === null}>Apply to debt</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(deleteId)} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent className="rounded-none bg-sheet"><AlertDialogHeader><AlertDialogTitle className="font-serif text-2xl">Delete this debt?</AlertDialogTitle><AlertDialogDescription>This removes it from your saved ledger and recalculates both plans.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-none">Keep it</AlertDialogCancel><AlertDialogAction onClick={removeDebt} className="rounded-none bg-destructive text-white hover:bg-destructive/90">Delete debt</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+    </main>
+  );
+}
