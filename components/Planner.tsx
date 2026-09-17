@@ -251,8 +251,8 @@ export function Planner({ demo = false }: { demo?: boolean }) {
   }
 
   async function signOut() {
-    if (supabase && !demo) await supabase.auth.signOut();
-    window.location.assign(demo ? "/" : "/login");
+    if (supabase) await supabase.auth.signOut();
+    window.location.assign("/login");
   }
 
   if (!loaded) return <main className="grid min-h-screen place-items-center bg-paper text-ink"><p className="font-serif text-2xl">Loading your ledger…</p></main>;
@@ -267,11 +267,13 @@ export function Planner({ demo = false }: { demo?: boolean }) {
         currency={currency}
         onCurrencyChange={changeCurrency}
         status={demo ? "Saved in this browser" : saveState === "saving" ? "Saving…" : saveState === "error" ? "Couldn’t save changes" : "All changes saved"}
-        action={<Button variant="ghost" size="sm" onClick={signOut}><LogOut /> {demo ? "Exit preview" : "Log out"}<span className="sr-only"> {email}</span></Button>}
+        action={demo
+          ? <a href="/login" target="_top" className="inline-flex h-11 items-center justify-center gap-2 px-4 text-sm font-semibold text-ink underline underline-offset-4"><LogOut className="size-4" /> Log in to account</a>
+          : <Button variant="ghost" size="sm" onClick={signOut}><LogOut /> Log out<span className="sr-only"> {email}</span></Button>}
       />
 
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
-        {demo && <div className="mt-5 flex flex-wrap items-center justify-center gap-3 border-l-2 border-snowball bg-sheet px-4 py-3 text-center text-sm"><span>Your preview changes are saved on this browser.</span><a href="/signup" target="_top" className="font-semibold underline underline-offset-4">Create an account to sync across devices</a></div>}
+        {demo && <div className="mt-5 flex flex-wrap items-center justify-center gap-3 border-l-2 border-snowball bg-sheet px-4 py-3 text-center text-sm"><span>Your preview changes are saved on this browser.</span><a href="/login" target="_top" className="font-semibold underline underline-offset-4">Already registered? Log in</a><a href="/signup" target="_top" className="font-semibold underline underline-offset-4">Create a new account</a></div>}
         <section className="border-b border-rule py-10 text-center md:py-14">
           <div className="mx-auto max-w-4xl">
             <p className="text-sm text-muted-ink">Your estimated debt-free date</p>
@@ -376,10 +378,3 @@ export function Planner({ demo = false }: { demo?: boolean }) {
           <DialogFooter><Button variant="outline" className="rounded-none" onClick={() => setAprDebtId(null)}>Cancel</Button><Button className="rounded-none" onClick={applyApr} disabled={estimatedApr === null}>Apply to debt</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={Boolean(deleteId)} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="rounded-none bg-sheet"><AlertDialogHeader><AlertDialogTitle className="font-serif text-2xl">Delete this debt?</AlertDialogTitle><AlertDialogDescription>This removes it from your saved ledger and recalculates both plans.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-none">Keep it</AlertDialogCancel><AlertDialogAction onClick={removeDebt} className="rounded-none bg-destructive text-white hover:bg-destructive/90">Delete debt</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
-    </main>
-  );
-}
