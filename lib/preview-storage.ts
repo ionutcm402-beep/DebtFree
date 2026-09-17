@@ -136,7 +136,7 @@ const defaults = (): PreviewState => ({
     { id: "f1000000-0000-4000-8000-000000000004", snapshot_date: "2026-09-01", total_balance: 13470 },
   ],
   workShifts: [],
-  workIncomeSettings: { hourly_rate: 0, tax_code: "1257L", ni_category: "A", pension_percent: 0 },
+  workIncomeSettings: { hourly_rate: 0, tax_code: "1257L", ni_category: "A", pension_percent: 0, holiday_allowance_days: 28, holiday_day_hours: 8, payroll_cutoff_days: 7 },
   currency: "GBP",
 });
 
@@ -172,7 +172,14 @@ export function loadPreviewState(): PreviewState {
       categoryBudgets: Array.isArray(stored.categoryBudgets) ? stored.categoryBudgets : fallback.categoryBudgets,
       debtPayments: Array.isArray(stored.debtPayments) ? stored.debtPayments : fallback.debtPayments,
       debtSnapshots: Array.isArray(stored.debtSnapshots) ? stored.debtSnapshots : fallback.debtSnapshots,
-      workShifts: Array.isArray(stored.workShifts) ? stored.workShifts : fallback.workShifts,
+      workShifts: Array.isArray(stored.workShifts) ? stored.workShifts.map((shift) => ({
+        ...shift,
+        entry_type: shift.entry_type === "holiday" ? "holiday" as const : "work" as const,
+        start_time: shift.start_time ?? "",
+        finish_time: shift.finish_time ?? "",
+        break_minutes: Number(shift.break_minutes ?? 0),
+        holiday_days: Number(shift.holiday_days ?? 0),
+      })) : fallback.workShifts,
       workIncomeSettings: stored.workIncomeSettings && typeof stored.workIncomeSettings === "object"
         ? { ...fallback.workIncomeSettings, ...stored.workIncomeSettings }
         : fallback.workIncomeSettings,
