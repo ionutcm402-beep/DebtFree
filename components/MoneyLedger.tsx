@@ -39,7 +39,8 @@ export function MoneyLedger({ demo = false }: { demo?: boolean }) {
     if (!supabase) { window.location.replace("/preview/ledger"); return; }
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { window.location.replace("/login"); return; }
       const [accountsResult, settingsResult] = await Promise.all([
         supabase.from("money_accounts").select("id,name,asset_type,value").order("created_at"),
