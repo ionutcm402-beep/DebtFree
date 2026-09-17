@@ -96,7 +96,8 @@ export function SpendingTracker({ demo = false }: { demo?: boolean }) {
     if (!supabase) { window.location.replace("/preview/spending"); return; }
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { window.location.replace("/login"); return; }
       const [expenseResult, wasteResult, savingResult, settingsResult, debtResult] = await Promise.all([
         supabase.from("expenses").select("id,merchant,expense_date,amount,category,source").order("expense_date", { ascending: false }),
