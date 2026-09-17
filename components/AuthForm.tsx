@@ -20,23 +20,32 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const isReset = mode === "reset";
   const needsPassword = mode === "login" || mode === "signup" || isReset;
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit() {
+    if (busy) return;
+    const cleanEmail = email.trim();
+    if (!isReset && !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
+      setMessage("Enter a valid email address.");
+      return;
+    }
+    if (needsPassword && password.length < 8) {
+      setMessage("Password must contain at least 8 characters.");
+      return;
+    }
     setBusy(true);
     setMessage("");
     try {
       const supabase = createClient();
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
         if (error) throw error;
         window.location.assign("/app");
       } else if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/app` } });
+        const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/app` } });
         if (error) throw error;
         if (data.session) window.location.assign("/app");
         else setMessage("Check your email to confirm your account.");
       } else if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password` });
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password` });
         if (error) throw error;
         setMessage("Password reset instructions are on their way.");
       } else {
@@ -49,6 +58,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function submitForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void submit();
   }
 
   async function googleSignIn() {
@@ -77,11 +91,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
         </p>
         {(mode === "login" || mode === "signup") && <Button type="button" variant="outline" className="mt-7 h-11 w-full rounded-none bg-sheet" onClick={googleSignIn} disabled={busy}>Continue with Google</Button>}
         {(mode === "login" || mode === "signup") && <div className="my-6 flex items-center gap-3 text-xs text-muted-ink"><span className="h-px flex-1 bg-rule" />or use email<span className="h-px flex-1 bg-rule" /></div>}
-        <form onSubmit={submit} className={mode === "forgot" ? "mt-7 space-y-5" : "space-y-5"}>
+        <form onSubmit={submitForm} noValidate className={mode === "forgot" ? "mt-7 space-y-5" : "space-y-5"}>
           {!isReset && <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="h-11 rounded-none bg-white text-center" /></div>}
           {needsPassword && <div className="space-y-2"><div className="flex justify-center gap-4"><Label htmlFor="password">Password</Label>{mode === "login" && <a href="/forgot-password" target="_top" className="text-sm text-muted-ink underline underline-offset-4">Forgot password?</a>}</div><Input id="password" type="password" minLength={8} autoComplete={isReset ? "new-password" : mode === "login" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} required className="h-11 rounded-none bg-white text-center" /></div>}
-          {message && <p role="status" className="border-l-2 border-snowball pl-3 text-sm leading-6 text-muted-ink">{message}</p>}
-          <Button type="submit" className="h-11 w-full rounded-none" disabled={busy}>{busy ? "Please wait…" : submitLabel}<ArrowRight className="size-4" /></Button>
+          {message && <p role="status" aria-live="polite" className="border-l-2 border-snowball pl-3 text-sm leading-6 text-muted-ink">{message}</p>}
+          <button type="submit" className="inline-flex h-11 w-full items-center justify-center gap-2 bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50" disabled={busy}>
+            {busy ? "Please wait…" : submitLabel}<ArrowRight className="size-4" />
+          </button>
         </form>
         {mode === "login" && <p className="mt-7 text-center text-sm text-muted-ink">New here? <a href="/signup" target="_top" className="font-semibold text-ink underline underline-offset-4">Create an account</a></p>}
         {mode === "signup" && <p className="mt-7 text-center text-sm text-muted-ink">Already have an account? <a href="/login" target="_top" className="font-semibold text-ink underline underline-offset-4">Log in</a></p>}
