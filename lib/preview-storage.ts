@@ -1,6 +1,7 @@
 import { CurrencyCode, isCurrencyCode } from "@/lib/currency";
 import { previewAccounts, previewCashflow, previewDebts } from "@/lib/demo-data";
 import type { DebtInput } from "@/lib/simulate";
+import type { WorkIncomeSettings, WorkShift } from "@/lib/uk-pay";
 
 export type PreviewCashflowEntry = { id: string; kind: "income" | "essential"; name: string; amount: number; pay_day: number };
 export type PreviewMoneyAccount = { id: string; name: string; asset_type: string; value: number };
@@ -75,6 +76,8 @@ export type PreviewState = {
   categoryBudgets: PreviewCategoryBudget[];
   debtPayments: PreviewDebtPayment[];
   debtSnapshots: PreviewDebtSnapshot[];
+  workShifts: WorkShift[];
+  workIncomeSettings: WorkIncomeSettings;
   currency: CurrencyCode;
 };
 
@@ -132,6 +135,8 @@ const defaults = (): PreviewState => ({
     { id: "f1000000-0000-4000-8000-000000000003", snapshot_date: "2026-08-01", total_balance: 13890 },
     { id: "f1000000-0000-4000-8000-000000000004", snapshot_date: "2026-09-01", total_balance: 13470 },
   ],
+  workShifts: [],
+  workIncomeSettings: { hourly_rate: 0, tax_code: "1257L", ni_category: "A", pension_percent: 0 },
   currency: "GBP",
 });
 
@@ -167,6 +172,10 @@ export function loadPreviewState(): PreviewState {
       categoryBudgets: Array.isArray(stored.categoryBudgets) ? stored.categoryBudgets : fallback.categoryBudgets,
       debtPayments: Array.isArray(stored.debtPayments) ? stored.debtPayments : fallback.debtPayments,
       debtSnapshots: Array.isArray(stored.debtSnapshots) ? stored.debtSnapshots : fallback.debtSnapshots,
+      workShifts: Array.isArray(stored.workShifts) ? stored.workShifts : fallback.workShifts,
+      workIncomeSettings: stored.workIncomeSettings && typeof stored.workIncomeSettings === "object"
+        ? { ...fallback.workIncomeSettings, ...stored.workIncomeSettings }
+        : fallback.workIncomeSettings,
       currency: isCurrencyCode(stored.currency) ? stored.currency : fallback.currency,
     };
   } catch {
