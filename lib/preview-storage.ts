@@ -81,6 +81,18 @@ export type PreviewState = {
 const storageKey = "debt-payoff-planner-preview-v1";
 const cookieMaxAge = 60 * 60 * 24 * 365;
 
+export function hasSavedPreviewState(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.localStorage?.getItem(storageKey)) return true;
+  } catch {
+    // The cookie fallback is checked below.
+  }
+  return typeof document !== "undefined" && document.cookie
+    .split("; ")
+    .some((cookie) => cookie.startsWith(`${storageKey}=`));
+}
+
 const defaults = (): PreviewState => ({
   debts: previewDebts.map((debt) => ({ ...debt })),
   cashflow: previewCashflow.map((entry) => ({ ...entry })),
