@@ -41,7 +41,8 @@ export function IncomePlanner({ demo = false }: { demo?: boolean }) {
     if (!supabase) { window.location.replace("/preview/income"); return; }
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { window.location.replace("/login"); return; }
       const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
       const [cashflowResult, debtsResult, settingsResult, expenseResult] = await Promise.all([
