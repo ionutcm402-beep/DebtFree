@@ -71,16 +71,17 @@
 }
 
 * { border-color: var(--rule); }
+html, body { max-width: 100%; overflow-x: clip; }
 body { background: var(--paper); color: var(--ink); font-family: var(--font-inter), sans-serif; text-align: center; }
 button, input, select, textarea { font: inherit; text-align: center; }
 ::selection { background: #dce7e0; }
 a, button { -webkit-tap-highlight-color: transparent; }
 a:focus-visible, button:focus-visible { outline: 3px solid color-mix(in srgb, var(--ring) 45%, transparent); outline-offset: 3px; }
 
-.planner-content { width: min(100% - 2.5rem, 80rem); margin-inline: auto; padding-block: 2.5rem 5rem; }
+.planner-content { width: min(100% - 2.5rem, 80rem); min-width: 0; margin-inline: auto; padding-block: 2.5rem 5rem; }
 .planner-title { font-family: var(--font-fraunces), serif; font-size: clamp(2.25rem, 6vw, 3rem); line-height: 1.08; letter-spacing: -.04em; }
 .planner-section-title { font-family: var(--font-fraunces), serif; font-size: clamp(1.65rem, 4vw, 1.875rem); line-height: 1.15; letter-spacing: -.02em; }
-.planner-copy { max-width: 42rem; margin-inline: auto; font-size: 1.0625rem; line-height: 1.75rem; color: var(--muted-ink); }
+.planner-copy { max-width: 42rem; margin-inline: auto; overflow-wrap: anywhere; font-size: 1.0625rem; line-height: 1.75rem; color: var(--muted-ink); }
 .action-row-button { display: flex; min-height: 2.75rem; width: 100%; align-items: center; justify-content: center; gap: .5rem; border-top: 1px solid var(--rule); padding-inline: 1.25rem; font-weight: 600; transition: background-color .15s ease; }
 .action-row-button:hover { background: var(--muted); }
 
