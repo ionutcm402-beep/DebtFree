@@ -31,8 +31,7 @@ const finishDate = (start: string | undefined, months: number | undefined) => {
 };
 export function Planner({ demo = false }: { demo?: boolean }) {
   const router = useRouter();
-  const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const supabase = useMemo(() => demo || !supabaseConfigured ? null : createClient(), [demo, supabaseConfigured]);
+  const supabase = useMemo(() => demo ? null : createClient(), [demo]);
   const [userId, setUserId] = useState(demo ? "preview" : "");
   const [email, setEmail] = useState(demo ? "Preview" : "");
   const [debts, setDebts] = useState<DebtInput[]>(demo ? previewDebts : []);
