@@ -46,7 +46,8 @@ export function MonthlyReview({ demo = false }: { demo?: boolean }) {
     if (!supabase) { window.location.replace("/preview/review"); return; }
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { window.location.replace("/login"); return; }
       const [cashflow, debts, settings, expenses, savings, waste, bills] = await Promise.all([
         supabase.from("cashflow_entries").select("id,kind,name,amount,pay_day").order("created_at"),
@@ -118,7 +119,8 @@ export function MonthlyReview({ demo = false }: { demo?: boolean }) {
     }
     if (!supabase) return;
     setStatus("Saving…");
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return;
     const { error } = await supabase.from("user_settings").upsert({ user_id: user.id, currency: next }, { onConflict: "user_id" });
     setStatus(error ? "Couldn’t save currency" : "All figures up to date");
