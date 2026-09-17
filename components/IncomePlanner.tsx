@@ -15,8 +15,7 @@ import { loadPreviewState, savePreviewState } from "@/lib/preview-storage";
 type CashflowEntry = { id: string; kind: "income" | "essential"; name: string; amount: number; pay_day: number };
 
 export function IncomePlanner({ demo = false }: { demo?: boolean }) {
-  const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const supabase = useMemo(() => demo || !configured ? null : createClient(), [configured, demo]);
+  const supabase = useMemo(() => demo ? null : createClient(), [demo]);
   const [userId, setUserId] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("GBP");
   const [entries, setEntries] = useState<CashflowEntry[]>(demo ? previewCashflow : []);
