@@ -52,7 +52,8 @@ export function MoneyGoals({ demo = false }: { demo?: boolean }) {
     if (!supabase) { window.location.replace("/preview/goals"); return; }
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { window.location.replace("/login"); return; }
       const [goalResult, settingsResult] = await Promise.all([
         supabase.from("money_goals").select("id,name,goal_type,target_amount,current_amount,target_date").order("target_date"),
