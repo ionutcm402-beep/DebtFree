@@ -10,11 +10,12 @@ import { formatMoney } from "@/lib/currency";
 import { createId } from "@/lib/id";
 import { loadPreviewState, savePreviewState } from "@/lib/preview-storage";
 import { createClient } from "@/lib/supabase/client";
-import { calculateWorkedHours, estimateUkMonthlyPay, financialYearBounds, financialYearPayPeriods, NiCategory, payPeriodForMonth, shiftsInPeriod, UkPayEstimate, WorkIncomeSettings, WorkShift } from "@/lib/uk-pay";
+import { calculateWorkedHours, datesInPeriod, estimateUkMonthlyPay, financialYearBounds, financialYearPayPeriods, NiCategory, payPeriodForMonth, shiftsInPeriod, UkPayEstimate, WorkIncomeSettings, WorkShift } from "@/lib/uk-pay";
 
-const defaultSettings: WorkIncomeSettings = { hourly_rate: 0, tax_code: "1257L", ni_category: "A", pension_percent: 0, holiday_allowance_days: 28, holiday_day_hours: 8, payroll_cutoff_days: 7 };
+const defaultSettings: WorkIncomeSettings = { hourly_rate: 0, tax_code: "1257L", ni_category: "A", pension_percent: 0, holiday_allowance_days: 28, holiday_day_hours: 8, payroll_cutoff_days: 7, payroll_payday_weekday: 5, payroll_week_start: 5 };
 const emptyDraft = (date: string): WorkShift => ({ id: createId(), work_date: date, entry_type: "work", start_time: "", finish_time: "", break_minutes: 0, holiday_days: 0, hours: 0, direct_tips: 0, payroll_gratuity: 0, other_income: 0, note: "" });
 const niCategories: NiCategory[] = ["A", "B", "C", "D", "E", "F", "H", "I", "J", "K", "L", "M", "N", "S", "V", "Z"];
+const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function monthKey(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
 function dateKey(year: number, month: number, day: number) { return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; }
@@ -57,14 +58,14 @@ export function WorkIncomeCalendar({ demo, onForecastChange, onStatusChange }: P
       if (!user) { window.location.replace("/login"); return; }
       const [shiftResult, settingsResult] = await Promise.all([
         supabase.from("work_shifts").select("id,work_date,entry_type,start_time,finish_time,break_minutes,holiday_days,hours,direct_tips,payroll_gratuity,other_income,note").gte("work_date", `${financialYear.startYear}-03-01`).lte("work_date", financialYear.end).order("work_date"),
-        supabase.from("user_settings").select("hourly_rate,tax_code,ni_category,pension_percent,holiday_allowance_days,holiday_day_hours,payroll_cutoff_days").maybeSingle(),
+        supabase.from("user_settings").select("hourly_rate,tax_code,ni_category,pension_percent,holiday_allowance_days,holiday_day_hours,payroll_cutoff_days,payroll_payday_weekday,payroll_week_start").maybeSingle(),
       ]);
       if (!active) return;
       if (shiftResult.error || settingsResult.error) { onStatusChange("Couldn’t load work calendar"); setLoaded(true); return; }
       setUserId(user.id);
       setShifts((shiftResult.data ?? []).map((shift) => normaliseShift(shift)));
       const saved = settingsResult.data;
-      setSettings({ hourly_rate: Number(saved?.hourly_rate ?? 0), tax_code: String(saved?.tax_code ?? "1257L"), ni_category: niCategories.includes(saved?.ni_category as NiCategory) ? saved?.ni_category as NiCategory : "A", pension_percent: Number(saved?.pension_percent ?? 0), holiday_allowance_days: Number(saved?.holiday_allowance_days ?? 28), holiday_day_hours: Number(saved?.holiday_day_hours ?? 8), payroll_cutoff_days: Number(saved?.payroll_cutoff_days ?? 7) });
+      setSettings({ hourly_rate: Number(saved?.hourly_rate ?? 0), tax_code: String(saved?.tax_code ?? "1257L"), ni_category: niCategories.includes(saved?.ni_category as NiCategory) ? saved?.ni_category as NiCategory : "A", pension_percent: Number(saved?.pension_percent ?? 0), holiday_allowance_days: Number(saved?.holiday_allowance_days ?? 28), holiday_day_hours: Number(saved?.holiday_day_hours ?? 8), payroll_cutoff_days: Number(saved?.payroll_cutoff_days ?? 7), payroll_payday_weekday: Number(saved?.payroll_payday_weekday ?? 5), payroll_week_start: Number(saved?.payroll_week_start ?? 5) });
       setLoaded(true);
       queueMicrotask(() => { settingsReady.current = true; });
     };
@@ -84,20 +85,19 @@ export function WorkIncomeCalendar({ demo, onForecastChange, onStatusChange }: P
     return () => window.clearTimeout(timeout);
   }, [demo, loaded, onStatusChange, settings, supabase, userId]);
 
-  const currentPeriod = useMemo(() => payPeriodForMonth(year, monthIndex, settings.payroll_cutoff_days), [monthIndex, settings.payroll_cutoff_days, year]);
+  const currentPeriod = useMemo(() => payPeriodForMonth(year, monthIndex, settings.payroll_payday_weekday, settings.payroll_week_start), [monthIndex, settings.payroll_payday_weekday, settings.payroll_week_start, year]);
   const periodShifts = useMemo(() => shiftsInPeriod(shifts, currentPeriod), [currentPeriod, shifts]);
   const estimate = useMemo(() => estimateUkMonthlyPay(periodShifts, settings), [periodShifts, settings]);
   useEffect(() => { onForecastChange(estimate); }, [estimate, onForecastChange]);
-  const periods = useMemo(() => financialYearPayPeriods(financialYear.startYear, settings.payroll_cutoff_days), [financialYear.startYear, settings.payroll_cutoff_days]);
+  const periods = useMemo(() => financialYearPayPeriods(financialYear.startYear, settings.payroll_payday_weekday, settings.payroll_week_start), [financialYear.startYear, settings.payroll_payday_weekday, settings.payroll_week_start]);
   const periodSummaries = useMemo(() => periods.map((period) => ({ period, estimate: estimateUkMonthlyPay(shiftsInPeriod(shifts, period), settings) })), [periods, settings, shifts]);
   const yearTotals = useMemo(() => periodSummaries.reduce((total, item) => ({ gross: total.gross + item.estimate.gross, takeHome: total.takeHome + item.estimate.takeHome, tips: total.tips + item.estimate.payrollTips + item.estimate.directTips, hours: total.hours + item.estimate.hours }), { gross: 0, takeHome: 0, tips: 0, hours: 0 }), [periodSummaries]);
   const holidayUsed = shifts.filter((shift) => shift.entry_type === "holiday" && shift.work_date >= financialYear.start && shift.work_date <= financialYear.end).reduce((sum, shift) => sum + shift.holiday_days, 0);
   const holidayRemaining = Math.max(0, settings.holiday_allowance_days - holidayUsed);
-  const daysInMonth = new Date(year, monthNumber, 0).getDate();
-  const leadingBlanks = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
-  const monthLabel = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(new Date(year, monthIndex, 1));
+  const periodDates = useMemo(() => datesInPeriod(currentPeriod), [currentPeriod]);
+  const weekdayHeadings = useMemo(() => Array.from({ length: 7 }, (_, index) => weekdays[(settings.payroll_week_start + index) % 7]), [settings.payroll_week_start]);
   const today = dateKey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-  const shiftsByDate = new Map(shifts.filter((shift) => shift.work_date.startsWith(shownMonth)).map((shift) => [shift.work_date, shift]));
+  const shiftsByDate = new Map(shifts.map((shift) => [shift.work_date, shift]));
   const draftHolidayDays = Math.min(1, Math.max(0.25, draft.holiday_days || 1));
   const draftHours = draft.entry_type === "holiday"
     ? settings.holiday_day_hours * draftHolidayDays
@@ -106,7 +106,7 @@ export function WorkIncomeCalendar({ demo, onForecastChange, onStatusChange }: P
       : draft.hours;
 
   function changeMonth(amount: number) { settingsReady.current = false; setShownMonth(monthKey(new Date(year, monthIndex + amount, 1))); }
-  function openDay(day: number) { const key = dateKey(year, monthIndex, day); setDraft(shiftsByDate.get(key) ?? emptyDraft(key)); setDialogOpen(true); }
+  function openDay(key: string) { setDraft(shiftsByDate.get(key) ?? emptyDraft(key)); setDialogOpen(true); }
   function updateDraft(field: keyof WorkShift, value: string) { const number = Math.max(0, Number(value)); const numericFields: Array<keyof WorkShift> = ["break_minutes", "holiday_days", "direct_tips", "payroll_gratuity", "other_income"]; setDraft((current) => ({ ...current, [field]: numericFields.includes(field) ? number : value })); }
 
   async function saveDay() {
@@ -136,9 +136,10 @@ export function WorkIncomeCalendar({ demo, onForecastChange, onStatusChange }: P
         <label className="text-sm font-semibold">Pension %<Input aria-label="Pension salary sacrifice percentage" type="number" min="0" max="100" step="0.1" value={settings.pension_percent} onChange={(event) => setSettings((current) => ({ ...current, pension_percent: Math.min(100, Math.max(0, Number(event.target.value))) }))} className="mt-2 h-11 rounded-none bg-white tabular-nums" /></label>
         <label className="text-sm font-semibold">Holiday allowance<Input aria-label="Holiday allowance days" type="number" min="0" step="0.5" value={settings.holiday_allowance_days} onChange={(event) => setSettings((current) => ({ ...current, holiday_allowance_days: Math.max(0, Number(event.target.value)) }))} className="mt-2 h-11 rounded-none bg-white tabular-nums" /></label>
         <label className="text-sm font-semibold">Hours per holiday day<Input aria-label="Hours per holiday day" type="number" min="0" max="24" step="0.25" value={settings.holiday_day_hours} onChange={(event) => setSettings((current) => ({ ...current, holiday_day_hours: Math.min(24, Math.max(0, Number(event.target.value))) }))} className="mt-2 h-11 rounded-none bg-white tabular-nums" /></label>
-        <label className="col-span-2 text-sm font-semibold">Cut-off days before payday<Input aria-label="Cut-off days before payday" type="number" min="0" max="21" step="1" value={settings.payroll_cutoff_days} onChange={(event) => setSettings((current) => ({ ...current, payroll_cutoff_days: Math.min(21, Math.max(0, Math.round(Number(event.target.value)))) }))} className="mx-auto mt-2 h-11 max-w-48 rounded-none bg-white tabular-nums" /></label>
+        <label className="text-sm font-semibold">Payday<NativeSelect aria-label="Payday weekday" value={String(settings.payroll_payday_weekday)} onChange={(event) => setSettings((current) => ({ ...current, payroll_payday_weekday: Number(event.target.value) }))} className="mt-2 h-11 w-full rounded-none bg-white text-center">{weekdays.map((day, index) => <NativeSelectOption key={day} value={String(index)}>Last {day}</NativeSelectOption>)}</NativeSelect></label>
+        <label className="text-sm font-semibold">Work week starts<NativeSelect aria-label="Work week start day" value={String(settings.payroll_week_start)} onChange={(event) => setSettings((current) => ({ ...current, payroll_week_start: Number(event.target.value) }))} className="mt-2 h-11 w-full rounded-none bg-white text-center">{weekdays.map((day, index) => <NativeSelectOption key={day} value={String(index)}>{day}</NativeSelectOption>)}</NativeSelect></label>
       </div>
-      <p className="mx-auto mt-5 max-w-3xl text-sm leading-6 text-muted-ink"><Info className="mr-1 inline size-4" /> Payday is the last Friday of each month. With seven cut-off days, the cut-off is the previous Friday. Use the NI category letter from your payslip; your NI number is not stored.</p>
+      <p className="mx-auto mt-5 max-w-3xl text-sm leading-6 text-muted-ink"><Info className="mr-1 inline size-4" /> Your pay period follows complete work weeks. It starts on {weekdays[settings.payroll_week_start]} and ends on {weekdays[(settings.payroll_week_start + 6) % 7]} before the last {weekdays[settings.payroll_payday_weekday]} payday. Your NI number is not stored.</p>
     </div>
 
     <div className="grid border-b border-rule md:grid-cols-[1fr_auto_1fr]">
@@ -147,10 +148,9 @@ export function WorkIncomeCalendar({ demo, onForecastChange, onStatusChange }: P
       <div className="p-5"><p className="text-sm text-muted-ink">Payday</p><p className="mt-1 font-serif text-2xl">{displayDate(currentPeriod.payday, { weekday: "short", day: "numeric", month: "long" })}</p></div>
     </div>
 
-    <div className="flex items-center justify-between gap-3 border-b border-rule px-3 py-4 sm:px-6"><Button variant="outline" size="icon" className="size-11 rounded-none" onClick={() => changeMonth(-1)} aria-label="Previous month"><ChevronLeft /></Button><div><h2 className="font-serif text-2xl sm:text-3xl">{monthLabel}</h2><p className="mt-1 text-sm text-muted-ink">Tap a day to add a shift or paid holiday</p></div><Button variant="outline" size="icon" className="size-11 rounded-none" onClick={() => changeMonth(1)} aria-label="Next month"><ChevronRight /></Button></div>
-    <div className="overflow-hidden"><div className="grid grid-cols-7 border-b border-rule bg-muted/60 text-xs font-semibold text-muted-ink sm:text-sm">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day} className="py-3">{day}</div>)}</div><div className="grid grid-cols-7">
-      {Array.from({ length: leadingBlanks }).map((_, index) => <div key={`blank-${index}`} className="min-h-20 border-b border-r border-rule bg-paper/50 sm:min-h-28" />)}
-      {Array.from({ length: daysInMonth }).map((_, index) => { const day = index + 1; const key = dateKey(year, monthIndex, day); const shift = shiftsByDate.get(key); const dayGross = shift ? shift.hours * settings.hourly_rate + shift.direct_tips + shift.payroll_gratuity + shift.other_income : 0; return <button key={key} type="button" onClick={() => openDay(day)} className={`min-h-20 border-b border-r border-rule p-1.5 transition-colors hover:bg-muted focus-visible:z-10 sm:min-h-28 sm:p-3 ${key === today ? "bg-snowball/10" : "bg-sheet"}`} aria-label={`${key}${shift ? shift.entry_type === "holiday" ? ", paid holiday" : `, ${shift.hours} hours worked` : ", add work"}`}><span className={`mx-auto grid size-7 place-items-center text-sm font-semibold ${key === today ? "bg-ink text-paper" : ""}`}>{day}</span>{shift ? <>{shift.entry_type === "holiday" ? <Palmtree className="mx-auto mt-1 size-4 text-positive" /> : <span className="mt-1 block text-xs font-semibold sm:text-sm">{shift.hours}h</span>}<span className="mt-0.5 block text-[11px] text-muted-ink sm:text-xs">{formatMoney(dayGross, "GBP")}</span></> : <Plus className="mx-auto mt-2 size-4 text-rule" />}</button>; })}
+    <div className="flex items-center justify-between gap-3 border-b border-rule px-3 py-4 sm:px-6"><Button variant="outline" size="icon" className="size-11 rounded-none" onClick={() => changeMonth(-1)} aria-label="Previous pay period"><ChevronLeft /></Button><div><h2 className="font-serif text-2xl sm:text-3xl">{currentPeriod.label} pay period</h2><p className="mt-1 text-sm text-muted-ink">{displayDate(currentPeriod.start)}–{displayDate(currentPeriod.cutoff)} · tap a day to add a shift or holiday</p></div><Button variant="outline" size="icon" className="size-11 rounded-none" onClick={() => changeMonth(1)} aria-label="Next pay period"><ChevronRight /></Button></div>
+    <div className="overflow-hidden"><div className="grid grid-cols-7 border-b border-rule bg-muted/60 text-xs font-semibold text-muted-ink sm:text-sm">{weekdayHeadings.map((day) => <div key={day} className="py-3">{day.slice(0, 3)}</div>)}</div><div className="grid grid-cols-7">
+      {periodDates.map((key) => { const shift = shiftsByDate.get(key); const dayGross = shift ? shift.hours * settings.hourly_rate + shift.direct_tips + shift.payroll_gratuity + shift.other_income : 0; return <button key={key} type="button" onClick={() => openDay(key)} className={`min-h-20 border-b border-r border-rule p-1.5 transition-colors hover:bg-muted focus-visible:z-10 sm:min-h-28 sm:p-3 ${key === today ? "bg-snowball/10" : "bg-sheet"}`} aria-label={`${key}${shift ? shift.entry_type === "holiday" ? ", paid holiday" : `, ${shift.hours} hours worked` : ", add work"}`}><span className={`mx-auto grid min-w-11 place-items-center text-xs font-semibold sm:text-sm ${key === today ? "bg-ink px-1 text-paper" : ""}`}>{displayDate(key, { day: "numeric", month: "short" })}</span>{shift ? <>{shift.entry_type === "holiday" ? <Palmtree className="mx-auto mt-1 size-4 text-positive" /> : <span className="mt-1 block text-xs font-semibold sm:text-sm">{shift.hours}h</span>}<span className="mt-0.5 block text-[11px] text-muted-ink sm:text-xs">{formatMoney(dayGross, "GBP")}</span></> : <Plus className="mx-auto mt-2 size-4 text-rule" />}</button>; })}
     </div></div>
 
     {!loaded ? <p className="px-5 py-8 text-muted-ink">Loading your pay year…</p> : <><div className="grid divide-y divide-rule border-t border-rule sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4"><div className="p-5"><Clock3 className="mx-auto size-5 text-snowball" /><p className="mt-2 text-sm text-muted-ink">Paid hours</p><p className="font-serif text-3xl">{estimate.hours}</p></div><div className="p-5"><Gift className="mx-auto size-5 text-avalanche" /><p className="mt-2 text-sm text-muted-ink">Payroll tips</p><p className="font-serif text-3xl">{formatMoney(estimate.payrollTips, "GBP")}</p></div><div className="p-5"><Banknote className="mx-auto size-5 text-snowball" /><p className="mt-2 text-sm text-muted-ink">Gross this pay period</p><p className="font-serif text-3xl">{formatMoney(estimate.gross, "GBP")}</p></div><div className="bg-ink p-5 text-paper"><p className="text-sm text-paper/70">Estimated take-home</p><p className="mt-1 font-serif text-4xl">{formatMoney(estimate.takeHome, "GBP")}</p></div></div>
