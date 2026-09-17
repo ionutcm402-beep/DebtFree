@@ -103,8 +103,8 @@ export function payPeriodForMonth(year: number, monthIndex: number, paydayWeekda
   const payday = lastWeekday(year, monthIndex, safePayday);
   const previousMonth = new Date(year, monthIndex - 1, 1, 12);
   const previousPayday = lastWeekday(previousMonth.getFullYear(), previousMonth.getMonth(), safePayday);
-  const cutoff = previousWeekday(payday, weekEnd);
-  const previousCutoff = previousWeekday(previousPayday, weekEnd);
+  const cutoff = previousWeekday(addDays(payday, -7), weekEnd);
+  const previousCutoff = previousWeekday(addDays(previousPayday, -7), weekEnd);
   const start = addDays(previousCutoff, 1);
   const days = Math.round((cutoff.getTime() - start.getTime()) / 86_400_000) + 1;
   return {
