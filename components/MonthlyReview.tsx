@@ -25,8 +25,7 @@ const currentMonth = () => {
 };
 
 export function MonthlyReview({ demo = false }: { demo?: boolean }) {
-  const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const supabase = useMemo(() => demo || !configured ? null : createClient(), [configured, demo]);
+  const supabase = useMemo(() => demo ? null : createClient(), [demo]);
   const [currency, setCurrency] = useState<CurrencyCode>("GBP");
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<ReviewData>(emptyData);
