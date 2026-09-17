@@ -17,7 +17,7 @@ import { PlannerHeader } from "@/components/PlannerHeader";
 import { currencyDetails, CurrencyCode, formatMoney, isCurrencyCode } from "@/lib/currency";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createId } from "@/lib/id";
-import { loadPreviewState, savePreviewState } from "@/lib/preview-storage";
+import { hasSavedPreviewState, loadPreviewState, savePreviewState } from "@/lib/preview-storage";
 
 type SaveState = "saved" | "saving" | "error";
 const debtTypes = ["Credit card", "Personal loan", "Mortgage", "Overdraft", "Car finance", "Student loan", "Buy now, pay later", "Tax debt", "Medical debt", "Business loan", "Family loan", "Other debt"];
@@ -40,6 +40,9 @@ export function Planner({ demo = false }: { demo?: boolean }) {
   const [loaded, setLoaded] = useState(demo);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [previewImport, setPreviewImport] = useState<{ debts: DebtInput[]; currency: CurrencyCode } | null>(null);
+  const [importingPreview, setImportingPreview] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [aprDebtId, setAprDebtId] = useState<string | null>(null);
   const [aprValues, setAprValues] = useState({ balance: "", payment: "", months: "" });
@@ -87,9 +90,14 @@ export function Planner({ demo = false }: { demo?: boolean }) {
         if (!active) return;
         setUserId(user.id);
         setEmail(user.email ?? "");
-        setDebts((debtResult.data ?? []).map((debt) => ({ ...debt, balance: Number(debt.balance), apr: Number(debt.apr), min_payment: Number(debt.min_payment), extra_payment: Number(debt.extra_payment ?? 0), start_date: debt.start_date ?? today(), account_type: debt.account_type ?? "Other debt" })));
+        const savedDebts = (debtResult.data ?? []).map((debt) => ({ ...debt, balance: Number(debt.balance), apr: Number(debt.apr), min_payment: Number(debt.min_payment), extra_payment: Number(debt.extra_payment ?? 0), start_date: debt.start_date ?? today(), account_type: debt.account_type ?? "Other debt" }));
+        setDebts(savedDebts);
         setExtraPayment(0);
         setCurrency(isCurrencyCode(settingsResult.data?.currency) ? settingsResult.data.currency : "GBP");
+        if (savedDebts.length === 0 && hasSavedPreviewState()) {
+          const preview = loadPreviewState();
+          if (preview.debts.length > 0) setPreviewImport({ debts: preview.debts, currency: preview.currency });
+        }
         setLoaded(true);
         queueMicrotask(() => { initialLoad.current = false; });
       } catch (error) {
@@ -263,6 +271,34 @@ export function Planner({ demo = false }: { demo?: boolean }) {
     window.location.assign("/login");
   }
 
+  async function importPreviewDebts() {
+    if (!supabase || !userId || !previewImport || debts.length > 0) return;
+    setImportingPreview(true);
+    setImportMessage("");
+    const importedDebts = previewImport.debts.map((debt) => ({
+      ...debt,
+      id: createId(),
+      start_date: debt.start_date || today(),
+      account_type: debt.account_type || "Other debt",
+      extra_payment: Math.max(0, debt.extra_payment ?? 0),
+    }));
+    const [debtResult, settingsResult] = await Promise.all([
+      supabase.from("debts").insert(importedDebts.map((debt) => ({ ...debt, user_id: userId }))),
+      supabase.from("user_settings").upsert({ user_id: userId, currency: previewImport.currency, extra_payment: 0 }, { onConflict: "user_id" }),
+    ]);
+    if (debtResult.error || settingsResult.error) {
+      console.error("[planner] Failed to import preview debts", debtResult.error || settingsResult.error);
+      setImportMessage("We couldn’t import the preview yet. Please try again.");
+      setImportingPreview(false);
+      return;
+    }
+    setDebts(importedDebts);
+    setCurrency(previewImport.currency);
+    setPreviewImport(null);
+    setImportMessage(`${importedDebts.length} preview debt${importedDebts.length === 1 ? "" : "s"} imported and saved.`);
+    setImportingPreview(false);
+  }
+
   if (loadError) return (
     <main className="grid min-h-screen place-items-center bg-paper px-5 text-center text-ink">
       <section className="w-full max-w-md border-y border-rule bg-sheet px-6 py-10">
@@ -293,6 +329,15 @@ export function Planner({ demo = false }: { demo?: boolean }) {
 
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         {demo && <div className="mt-5 flex flex-wrap items-center justify-center gap-3 border-l-2 border-snowball bg-sheet px-4 py-3 text-center text-sm"><span>Your preview changes are saved on this browser.</span><a href="/login" target="_top" className="font-semibold underline underline-offset-4">Already registered? Log in</a><a href="/signup" target="_top" className="font-semibold underline underline-offset-4">Create a new account</a></div>}
+        {!demo && previewImport && <div className="mt-5 border-l-2 border-snowball bg-sheet px-5 py-4 text-center">
+          <p className="font-semibold">We found {previewImport.debts.length} debt{previewImport.debts.length === 1 ? "" : "s"} saved in Preview on this device.</p>
+          <p className="mt-1 text-sm text-muted-ink">Import them into your account, or start with an empty ledger. Existing account data is never replaced.</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            <Button className="h-11 rounded-none" onClick={() => void importPreviewDebts()} disabled={importingPreview}>{importingPreview ? "Importing…" : "Import preview debts"}</Button>
+            <Button variant="outline" className="h-11 rounded-none" onClick={() => setPreviewImport(null)} disabled={importingPreview}>Start fresh</Button>
+          </div>
+        </div>}
+        {importMessage && <p role="status" className="mt-5 border-l-2 border-positive bg-sheet px-4 py-3 text-sm">{importMessage}</p>}
         <section className="border-b border-rule py-10 text-center md:py-14">
           <div className="mx-auto max-w-4xl">
             <p className="text-sm text-muted-ink">Your estimated debt-free date</p>
