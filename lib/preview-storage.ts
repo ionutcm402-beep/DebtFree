@@ -136,7 +136,7 @@ const defaults = (): PreviewState => ({
     { id: "f1000000-0000-4000-8000-000000000004", snapshot_date: "2026-09-01", total_balance: 13470 },
   ],
   workShifts: [],
-  workIncomeSettings: { hourly_rate: 0, tax_code: "1257L", ni_category: "A", pension_percent: 0, holiday_allowance_days: 28, holiday_day_hours: 8, payroll_cutoff_days: 7 },
+  workIncomeSettings: { hourly_rate: 0, tax_code: "1257L", ni_category: "A", pension_percent: 0, holiday_allowance_days: 28, holiday_day_hours: 8, payroll_cutoff_days: 7, payroll_payday_weekday: 5, payroll_week_start: 5 },
   currency: "GBP",
 });
 
