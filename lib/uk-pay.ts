@@ -8,6 +8,8 @@ export type WorkIncomeSettings = {
   holiday_allowance_days: number;
   holiday_day_hours: number;
   payroll_cutoff_days: number;
+  payroll_payday_weekday: number;
+  payroll_week_start: number;
 };
 
 export type WorkShift = {
@@ -66,9 +68,15 @@ function addDays(value: Date, days: number) {
   return next;
 }
 
-function lastFriday(year: number, monthIndex: number) {
+function lastWeekday(year: number, monthIndex: number, weekday: number) {
   const date = new Date(year, monthIndex + 1, 0, 12);
-  while (date.getDay() !== 5) date.setDate(date.getDate() - 1);
+  while (date.getDay() !== weekday) date.setDate(date.getDate() - 1);
+  return date;
+}
+
+function previousWeekday(value: Date, weekday: number) {
+  const date = addDays(value, -1);
+  while (date.getDay() !== weekday) date.setDate(date.getDate() - 1);
   return date;
 }
 
@@ -88,12 +96,15 @@ export function financialYearBounds(dateValue: string) {
   return { startYear, start: `${startYear}-04-06`, end: `${startYear + 1}-04-05`, label: `${startYear}/${String(startYear + 1).slice(-2)}` };
 }
 
-export function payPeriodForMonth(year: number, monthIndex: number, cutoffDays = 7): PayPeriod {
-  const payday = lastFriday(year, monthIndex);
+export function payPeriodForMonth(year: number, monthIndex: number, paydayWeekday = 5, weekStart = 5): PayPeriod {
+  const safePayday = Math.min(6, Math.max(0, Math.round(paydayWeekday)));
+  const safeWeekStart = Math.min(6, Math.max(0, Math.round(weekStart)));
+  const weekEnd = (safeWeekStart + 6) % 7;
+  const payday = lastWeekday(year, monthIndex, safePayday);
   const previousMonth = new Date(year, monthIndex - 1, 1, 12);
-  const previousPayday = lastFriday(previousMonth.getFullYear(), previousMonth.getMonth());
-  const cutoff = addDays(payday, -cutoffDays);
-  const previousCutoff = addDays(previousPayday, -cutoffDays);
+  const previousPayday = lastWeekday(previousMonth.getFullYear(), previousMonth.getMonth(), safePayday);
+  const cutoff = previousWeekday(payday, weekEnd);
+  const previousCutoff = previousWeekday(previousPayday, weekEnd);
   const start = addDays(previousCutoff, 1);
   const days = Math.round((cutoff.getTime() - start.getTime()) / 86_400_000) + 1;
   return {
@@ -105,8 +116,19 @@ export function payPeriodForMonth(year: number, monthIndex: number, cutoffDays =
   };
 }
 
-export function financialYearPayPeriods(startYear: number, cutoffDays = 7) {
-  return Array.from({ length: 12 }, (_, index) => payPeriodForMonth(startYear + Math.floor((index + 3) / 12), (index + 3) % 12, cutoffDays));
+export function financialYearPayPeriods(startYear: number, paydayWeekday = 5, weekStart = 5) {
+  return Array.from({ length: 12 }, (_, index) => payPeriodForMonth(startYear + Math.floor((index + 3) / 12), (index + 3) % 12, paydayWeekday, weekStart));
+}
+
+export function datesInPeriod(period: PayPeriod) {
+  const dates: string[] = [];
+  let date = dateFromKey(period.start);
+  const end = dateFromKey(period.cutoff);
+  while (date <= end) {
+    dates.push(keyFromDate(date));
+    date = addDays(date, 1);
+  }
+  return dates;
 }
 
 export function shiftsInPeriod(shifts: WorkShift[], period: PayPeriod) {
