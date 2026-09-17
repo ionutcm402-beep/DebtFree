@@ -20,8 +20,7 @@ const targetOptions = [
 const termLabel = (months: number) => months < 12 ? `${months} month${months === 1 ? "" : "s"}` : months % 12 === 0 ? `${months / 12} year${months === 12 ? "" : "s"}` : `${months} months`;
 
 export function TargetPlanner({ demo = false }: { demo?: boolean }) {
-  const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const supabase = useMemo(() => demo || !configured ? null : createClient(), [configured, demo]);
+  const supabase = useMemo(() => demo ? null : createClient(), [demo]);
   const [debts, setDebts] = useState<DebtInput[]>(demo ? previewDebts : []);
   const [income, setIncome] = useState<IncomeSettings>(demo ? { ...previewIncome, monthly_income: previewCashflow.filter((entry) => entry.kind === "income").reduce((sum, entry) => sum + entry.amount, 0), housing_cost: previewCashflow.filter((entry) => entry.kind === "essential").reduce((sum, entry) => sum + entry.amount, 0), utilities_cost: 0, food_cost: 0, transport_cost: 0, other_essential_cost: 0 } : { currency: "GBP", monthly_income: 0, housing_cost: 0, utilities_cost: 0, food_cost: 0, transport_cost: 0, other_essential_cost: 0 });
   const [targetMonths, setTargetMonths] = useState(24);
