@@ -11,13 +11,12 @@ function outputText(response: { output_text?: string; output?: Array<{ content?:
 
 export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "AI receipt scanning is not connected yet. Use Private scan for now." }, { status: 503 });
+  const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+  if (!apiKey && !gatewayToken) return NextResponse.json({ error: "AI receipt scanning is temporarily unavailable." }, { status: 503 });
 
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Log in before using AI receipt scanning." }, { status: 401 });
-  }
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Log in before using AI receipt scanning." }, { status: 401 });
 
   let payload: { image?: unknown };
   try {
@@ -43,11 +42,11 @@ export async function POST(request: Request) {
   };
 
   try {
-    const aiResponse = await fetch("https://api.openai.com/v1/responses", {
+    const aiResponse = await fetch(apiKey ? "https://api.openai.com/v1/responses" : "https://ai-gateway.vercel.sh/v1/responses", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${apiKey || gatewayToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: process.env.OPENAI_RECEIPT_MODEL || "gpt-4o-mini",
+        model: apiKey ? process.env.OPENAI_RECEIPT_MODEL || "gpt-4o-mini" : process.env.AI_GATEWAY_RECEIPT_MODEL || "openai/gpt-5.4",
         input: [{
           role: "user",
           content: [
