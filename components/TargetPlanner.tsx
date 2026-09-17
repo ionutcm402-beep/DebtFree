@@ -43,7 +43,8 @@ export function TargetPlanner({ demo = false }: { demo?: boolean }) {
     }
     let active = true;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         window.location.replace("/login");
         return;
@@ -83,7 +84,8 @@ export function TargetPlanner({ demo = false }: { demo?: boolean }) {
       return;
     }
     if (!demo && supabase) {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (user) await supabase.from("user_settings").upsert({ user_id: user.id, currency }, { onConflict: "user_id" });
     }
   }
