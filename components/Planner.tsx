@@ -38,6 +38,7 @@ export function Planner({ demo = false }: { demo?: boolean }) {
   const [extraPayment, setExtraPayment] = useState(0);
   const [currency, setCurrency] = useState<CurrencyCode>("GBP");
   const [loaded, setLoaded] = useState(demo);
+  const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [aprDebtId, setAprDebtId] = useState<string | null>(null);
@@ -68,14 +69,18 @@ export function Planner({ demo = false }: { demo?: boolean }) {
     let active = true;
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
         if (!user) {
           router.replace("/login");
           return;
         }
-        const [debtResult, settingsResult] = await Promise.all([
-          supabase.from("debts").select("id,name,balance,apr,min_payment,extra_payment,start_date,account_type").order("created_at"),
-          supabase.from("user_settings").select("extra_payment,currency").maybeSingle(),
+        const [debtResult, settingsResult] = await Promise.race([
+          Promise.all([
+            supabase.from("debts").select("id,name,balance,apr,min_payment,extra_payment,start_date,account_type").order("created_at"),
+            supabase.from("user_settings").select("extra_payment,currency").maybeSingle(),
+          ]),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("Ledger loading timed out")), 12_000)),
         ]);
         if (debtResult.error) throw debtResult.error;
         if (settingsResult.error) throw settingsResult.error;
@@ -87,8 +92,12 @@ export function Planner({ demo = false }: { demo?: boolean }) {
         setCurrency(isCurrencyCode(settingsResult.data?.currency) ? settingsResult.data.currency : "GBP");
         setLoaded(true);
         queueMicrotask(() => { initialLoad.current = false; });
-      } catch {
-        if (active) setSaveState("error");
+      } catch (error) {
+        console.error("[planner] Failed to load account data", error);
+        if (active) {
+          setLoadError(true);
+          setSaveState("error");
+        }
       }
     })();
     return () => { active = false; };
@@ -253,6 +262,17 @@ export function Planner({ demo = false }: { demo?: boolean }) {
     if (supabase) await supabase.auth.signOut();
     window.location.assign("/login");
   }
+
+  if (loadError) return (
+    <main className="grid min-h-screen place-items-center bg-paper px-5 text-center text-ink">
+      <section className="w-full max-w-md border-y border-rule bg-sheet px-6 py-10">
+        <h1 className="font-serif text-3xl">We couldn’t load your ledger</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-ink">Your account is safe. Check your connection, then try loading it again.</p>
+        <Button className="mt-6 h-11 w-full rounded-none" onClick={() => window.location.reload()}>Try again</Button>
+        <a href="/login" className="mt-5 inline-flex h-11 items-center justify-center text-sm font-semibold underline underline-offset-4">Back to login</a>
+      </section>
+    </main>
+  );
 
   if (!loaded) return <main className="grid min-h-screen place-items-center bg-paper text-ink"><p className="font-serif text-2xl">Loading your ledger…</p></main>;
 
