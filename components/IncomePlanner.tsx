@@ -15,7 +15,7 @@ import { WorkIncomeCalendar } from "@/components/WorkIncomeCalendar";
 import type { UkPayEstimate } from "@/lib/uk-pay";
 
 type CashflowEntry = { id: string; kind: "income" | "essential"; name: string; amount: number; pay_day: number };
-const emptyWorkEstimate: UkPayEstimate = { hours: 0, wages: 0, directTips: 0, payrollExtras: 0, gross: 0, pension: 0, incomeTax: 0, nationalInsurance: 0, takeHome: 0, annualEquivalent: 0 };
+const emptyWorkEstimate: UkPayEstimate = { hours: 0, holidayHours: 0, holidayPay: 0, wages: 0, directTips: 0, payrollTips: 0, otherIncome: 0, payrollExtras: 0, gross: 0, pension: 0, incomeTax: 0, nationalInsurance: 0, takeHome: 0, annualEquivalent: 0 };
 
 export function IncomePlanner({ demo = false }: { demo?: boolean }) {
   const supabase = useMemo(() => demo ? null : createClient(), [demo]);
