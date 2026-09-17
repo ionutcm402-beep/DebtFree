@@ -11,8 +11,11 @@ import { previewCashflow, previewDebts } from "@/lib/demo-data";
 import { createClient } from "@/lib/supabase/client";
 import { createId } from "@/lib/id";
 import { loadPreviewState, savePreviewState } from "@/lib/preview-storage";
+import { WorkIncomeCalendar } from "@/components/WorkIncomeCalendar";
+import type { UkPayEstimate } from "@/lib/uk-pay";
 
 type CashflowEntry = { id: string; kind: "income" | "essential"; name: string; amount: number; pay_day: number };
+const emptyWorkEstimate: UkPayEstimate = { hours: 0, wages: 0, directTips: 0, payrollExtras: 0, gross: 0, pension: 0, incomeTax: 0, nationalInsurance: 0, takeHome: 0, annualEquivalent: 0 };
 
 export function IncomePlanner({ demo = false }: { demo?: boolean }) {
   const supabase = useMemo(() => demo ? null : createClient(), [demo]);
@@ -21,6 +24,7 @@ export function IncomePlanner({ demo = false }: { demo?: boolean }) {
   const [entries, setEntries] = useState<CashflowEntry[]>(demo ? previewCashflow : []);
   const [debtPayment, setDebtPayment] = useState(demo ? previewDebts.reduce((sum, debt) => sum + debt.min_payment + (debt.extra_payment ?? 0), 0) : 0);
   const [trackedSpend, setTrackedSpend] = useState(0);
+  const [workEstimate, setWorkEstimate] = useState<UkPayEstimate>(emptyWorkEstimate);
   const [loaded, setLoaded] = useState(demo);
   const [status, setStatus] = useState(demo ? "Saved in this browser" : "All changes saved");
   const initial = useRef(true);
@@ -99,7 +103,8 @@ export function IncomePlanner({ demo = false }: { demo?: boolean }) {
 
   const incomes = entries.filter((entry) => entry.kind === "income");
   const essentials = entries.filter((entry) => entry.kind === "essential");
-  const incomeTotal = incomes.reduce((sum, entry) => sum + entry.amount, 0);
+  const otherIncomeTotal = incomes.reduce((sum, entry) => sum + entry.amount, 0);
+  const incomeTotal = otherIncomeTotal + workEstimate.takeHome;
   const essentialTotal = essentials.reduce((sum, entry) => sum + entry.amount, 0);
   const availableForDebt = Math.max(0, incomeTotal - essentialTotal);
   const difference = availableForDebt - debtPayment;
@@ -120,11 +125,12 @@ export function IncomePlanner({ demo = false }: { demo?: boolean }) {
       <PlannerHeader demo={demo} active="income" currency={currency} onCurrencyChange={(nextCurrency) => { setCurrency(nextCurrency); if (demo) savePreviewState({ currency: nextCurrency }); }} status={status} />
       <div className="planner-content">
         <a href={demo ? "/preview" : "/app"} target="_top" className="inline-flex items-center gap-2 text-sm font-semibold text-muted-ink hover:text-ink"><ArrowLeft className="size-4" /> Back to debt plan</a>
-        <h1 className="mt-8 planner-title">Monthly money</h1>
-        <p className="mx-auto mt-3 max-w-2xl text-[17px] leading-7 text-muted-ink">Give every income and essential expense its own name. Add as many rows as you need.</p>
-        <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_.72fr]">
-          <section className="space-y-10"><div><h2 className="mb-5 font-serif text-3xl">Income</h2>{ledger("income", incomes)}</div><div><h2 className="mb-5 font-serif text-3xl">Essential spending</h2>{ledger("essential", essentials)}</div></section>
-          <aside className="lg:sticky lg:top-8 lg:self-start"><div className="border-y border-ink bg-sheet p-6"><WalletCards className="mx-auto size-7 text-snowball" /><p className="mt-6 text-sm text-muted-ink">Available for debt each month</p><p className="mt-1 font-serif text-4xl tracking-tight sm:text-5xl">{formatMoney(availableForDebt, currency)}</p><dl className="mt-7 divide-y divide-rule border-y border-rule text-sm"><div className="flex justify-between py-3"><dt>Total income</dt><dd>{formatMoney(incomeTotal, currency)}</dd></div><div className="flex justify-between py-3"><dt>Essential spending plan</dt><dd>− {formatMoney(essentialTotal, currency)}</dd></div><div className="flex justify-between py-3"><dt>Tracked this month</dt><dd>{formatMoney(trackedSpend, currency)}</dd></div><div className="flex justify-between py-3"><dt>Debt payments</dt><dd>− {formatMoney(debtPayment, currency)}</dd></div></dl><div className={`mt-5 border-l-2 pl-4 text-sm leading-6 ${difference >= 0 ? "border-positive text-positive" : "border-avalanche text-avalanche"}`}>{difference >= 0 ? <><Check className="mr-1 inline size-4" /> Your plan leaves {formatMoney(difference, currency)} each month.</> : <>Your debt plan is {formatMoney(Math.abs(difference), currency)} above the amount available.</>}</div><a href={demo ? "/preview/spending" : "/app/spending"} target="_top" className="mt-7 inline-flex h-11 w-full items-center justify-center border border-ink px-5 font-semibold text-ink">Open spending tracker</a><a href={demo ? "/preview/target" : "/app/target"} target="_top" className="mt-3 inline-flex h-11 w-full items-center justify-center bg-ink px-5 font-semibold text-paper">Choose a payoff target</a></div></aside>
+        <h1 className="mt-8 planner-title">Income forecast</h1>
+        <p className="mx-auto mt-3 max-w-2xl text-[17px] leading-7 text-muted-ink">Record each shift, see your expected take-home pay, then compare it with your monthly commitments.</p>
+        <div className="mt-10"><WorkIncomeCalendar demo={demo} onForecastChange={setWorkEstimate} onStatusChange={setStatus} /></div>
+        <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_.72fr]">
+          <section className="space-y-10"><div><h2 className="mb-2 font-serif text-3xl">Other monthly income</h2><p className="mx-auto mb-5 max-w-xl text-sm leading-6 text-muted-ink">Add regular income not already recorded in the work calendar. Do not enter your wages twice.</p>{ledger("income", incomes)}</div><div><h2 className="mb-5 font-serif text-3xl">Essential spending</h2>{ledger("essential", essentials)}</div></section>
+          <aside className="lg:sticky lg:top-8 lg:self-start"><div className="border-y border-ink bg-sheet p-6"><WalletCards className="mx-auto size-7 text-snowball" /><p className="mt-6 text-sm text-muted-ink">Available for debt each month</p><p className="mt-1 font-serif text-4xl tracking-tight sm:text-5xl">{formatMoney(availableForDebt, currency)}</p><dl className="mt-7 divide-y divide-rule border-y border-rule text-sm"><div className="flex justify-between py-3"><dt>Shift take-home forecast</dt><dd>{formatMoney(workEstimate.takeHome, currency)}</dd></div><div className="flex justify-between py-3"><dt>Other monthly income</dt><dd>{formatMoney(otherIncomeTotal, currency)}</dd></div><div className="flex justify-between py-3"><dt>Total income</dt><dd>{formatMoney(incomeTotal, currency)}</dd></div><div className="flex justify-between py-3"><dt>Essential spending plan</dt><dd>− {formatMoney(essentialTotal, currency)}</dd></div><div className="flex justify-between py-3"><dt>Tracked this month</dt><dd>{formatMoney(trackedSpend, currency)}</dd></div><div className="flex justify-between py-3"><dt>Debt payments</dt><dd>− {formatMoney(debtPayment, currency)}</dd></div></dl><div className={`mt-5 border-l-2 pl-4 text-sm leading-6 ${difference >= 0 ? "border-positive text-positive" : "border-avalanche text-avalanche"}`}>{difference >= 0 ? <><Check className="mr-1 inline size-4" /> Your plan leaves {formatMoney(difference, currency)} each month.</> : <>Your debt plan is {formatMoney(Math.abs(difference), currency)} above the amount available.</>}</div><a href={demo ? "/preview/spending" : "/app/spending"} target="_top" className="mt-7 inline-flex h-11 w-full items-center justify-center border border-ink px-5 font-semibold text-ink">Open spending tracker</a><a href={demo ? "/preview/target" : "/app/target"} target="_top" className="mt-3 inline-flex h-11 w-full items-center justify-center bg-ink px-5 font-semibold text-paper">Choose a payoff target</a></div></aside>
         </div>
       </div>
     </main>
