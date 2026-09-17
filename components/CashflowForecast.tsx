@@ -49,7 +49,8 @@ export function CashflowForecast({ demo = false }: { demo?: boolean }) {
     if (!supabase) { window.location.replace("/preview/forecast"); return; }
     let active = true;
     void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { window.location.replace("/login"); return; }
       const [cashflowResult, billResult, subscriptionResult, debtResult, settingsResult] = await Promise.all([
         supabase.from("cashflow_entries").select("id,kind,name,amount,pay_day").order("created_at"),
